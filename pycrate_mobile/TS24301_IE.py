@@ -1037,7 +1037,7 @@ class ExtEmergNumList(Envelope):
     _GEN = (
         Uint('spare', bl=7),
         Uint('EENLValidity', bl=1, dic=EENLValidity_dict),
-        Array('EENL', GEN=ExtEmergNum()),
+        Sequence('EENL', GEN=ExtEmergNum()),
         )
 
 

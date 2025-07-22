@@ -1908,7 +1908,7 @@ _CriteriaType_dict = {
 class _CritDNNs(Envelope):
     _GEN = (
         Uint8('Cnt'),
-        Array('DNNs', GEN=DNN())
+        Sequence('DNNs', GEN=DNN())
         )
     
     def __init__(self, *args, **kwargs):
@@ -1933,7 +1933,7 @@ class _CritOSAppId(Envelope):
 class _CritOSAppIds(Envelope):
     _GEN = (
         Uint8('Cnt'),
-        Array('OSAppIds', GEN=_CritOSAppId('OSAppId'))
+        Sequence('OSAppIds', GEN=_CritOSAppId('OSAppId'))
         )
     
     def __init__(self, *args, **kwargs):
