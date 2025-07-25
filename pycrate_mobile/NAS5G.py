@@ -30,7 +30,7 @@
 from pycrate_core.utils import *
 
 from .TS24501_FGMM  import FGMMTypeClasses, FGMMSecProtNASMessage
-from .TS24501_IE    import FGSMMContType
+from .TS24501_IE    import FGSMMContType,PayloadContainerMult
 from .TS24501_FGSM  import FGSMTypeClasses
 from .TS24501_UEPOL import FGUEPOLTypeClasses
 from .TS24519_TSNAF import FGTSNAFEthPortTypeClasses, FGTSNAFBridgeTypeClasses
@@ -244,7 +244,7 @@ def parse_PayCont(conttype, buf):
             return None, 96
         else:
             # parse each entry
-            for entry in cont['Entries']:
+            for entry in Cont['Entries']:
                 e_conttype, e_buf = Cont['Type'].get_val(), Cont['Cont'].get_val()
                 e_cont, e_err = parse_NAS5GPayCont(e_conttype, e_buf)
                 if e_err == 0:
