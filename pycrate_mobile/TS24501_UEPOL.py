@@ -44,7 +44,7 @@ from .TS24007       import *
 from .TS24526_UEPOL import *
 from .TS24588_UEPOL import *
 from .TS24008_IE    import (
-    PLMN, 
+    PLMN, APN
     )
 
 
@@ -323,3 +323,16 @@ FGUEPOLTypeClasses = {
 def get_5guepol_msg_instances():
     return {k: FGUEPOLTypeClasses[k]() for k in FGUEPOLTypeClasses}
 
+class FGUEPOL(Envelope):
+    _name = '5GUEPOL'
+    _GEN = (
+        FGUEPOLHeader(),
+        Alt('Content', GEN={
+            1 : FGUEPOLManageUEPolicyCommand()[1:],
+            2 : Buf('spare'),
+            3 : FGUEPOLManageUEPolicyCommandReject()[1:],
+            4 : FGUEPOLStateInd()[1:]
+        },
+        sel=lambda self: self.get_env()['5GUEPOLHeader']['Type'].get_val(),
+        )
+    )

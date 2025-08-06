@@ -49,17 +49,19 @@ from pycrate_core.charpy import Charpy
 
 from pycrate_ether.Ethernet         import EtherType_dict
 from pycrate_ether.IP               import IPProt_dict
+from pycrate_mobile.TS23040_SMS import SMS_DATA_MT_COMBINED
 from pycrate_mobile.TS24008_IE      import (
     BufBCD, PLMN, GPRSTimer, GPRSTimer3, APN, TFT, TimeZoneTime,
     PLMNList, TMGI,
     )
+from pycrate_mobile.TS24011_PPSMS import CP_MSG
 from pycrate_mobile.TS24301_IE      import (
     EPSQoS, ExtEPSQoS, APN_AMBR, ExtAPN_AMBR, NAS_KSI,
     _DDX_dict as RelAssist_DDXDict,
     )
 from pycrate_mobile.TS31115         import PacketCmdSMSPP
 from pycrate_mobile.TS29244_PFCP    import FQDN
-
+from pycrate_mobile.TS24501_UEPOL import FGUEPOL
 _str_reserved = 'reserved'
 _str_mnospec  = 'operator-specific'
 
@@ -1312,7 +1314,7 @@ class FGSNetFeat(Envelope):
         Uint('RestrictEC', bl=2),
         Uint('MCSI', bl=1),
         Uint('EMCN3', bl=1), # end of octet 2
-        Uint('spare', bl=1),
+        Uint('spare_uint', bl=1),
         Uint('PR', bl=1),
         Uint('RPR', bl=1),
         Uint('PIV', bl=1),
@@ -1651,14 +1653,14 @@ class _CIoTSmallData_CPUD(Envelope):
     _GEN = (
         Uint('DDX', bl=2, dic=_CIoTDDX_dict),
         Uint('PDUSessID', bl=3, dic={0:'No PDU session identity assigned'}),
-        Buf('Data', val=b'', rep=REPR_HEX)
+        CP_MSG('Data')
         )
 
 
 class _CIoTSmallData_SMS(Envelope):
     _GEN = (
         Uint('spare', bl=5),
-        Buf('Data', val=b'', rep=REPR_HEX)
+        SMS_DATA_MT_COMBINED('Data')
         )
 
 
@@ -1667,8 +1669,8 @@ class _CIoTSmallData_LCS(Envelope):
         Uint('DDX', bl=2, dic=_CIoTDDX_dict),
         Uint('spare', bl=3),
         Uint8('AddInfoLen'),
-        Buf('AddInfo', val=b'', rep=REPR_HEX),
-        Buf('Data', val=b'', rep=REPR_HEX)
+        Buf('AddInfo', rep=REPR_HEX,bl=128),
+        Buf('Data', rep=REPR_HEX,bl=128) #arbitrary bit lengths cause LPP not implemented
         )
     
     def __init__(self, *args, **kwargs):
@@ -1999,7 +2001,7 @@ class OperatorAccessCatDefs(Sequence):
 # Payload container
 # TS 24.501, 9.11.3.39
 #------------------------------------------------------------------------------#
-# see EOF
+
 
 
 #------------------------------------------------------------------------------#
@@ -2018,7 +2020,7 @@ class FGSMMContType(IntEnum):
     CIOTUD  = 8
     SLAA    = 9
     EVNOT   = 10
-    MULT    = 15   
+    MULT    = 15
 
 
 PayloadContainerType_dict = {
@@ -2314,7 +2316,7 @@ class SORReq(Envelope):
     _GEN = (
         Buf('SOR_MACI_AUSF', bl=128, rep=REPR_HEX),
         Uint16('CntSOR'),
-        Alt('Data', GEN={
+        Alt('PacketCmdORPLMNAT', GEN={
             0: PacketCmdSMSPP(), # STK request
             1: Sequence('PLMNATList', GEN=Envelope('PLMNAT', GEN=(
                 PLMN(),
@@ -4008,22 +4010,23 @@ class PDUSessionPairID(Uint8):
 class RSN(Uint8):
     _dic = {0 : 'V1', 1 : 'V2'} 
 
-
-#------------------------------------------------------------------------------#
+# ------------------------------------------------------------------------------#
 # Payload container
 # TS 24.501, 9.11.3.39
-#------------------------------------------------------------------------------#
+# ------------------------------------------------------------------------------#
 
 _PayContOptType_dict = {
-    12 : 'PDU session ID',
-    24 : 'Additional information',
-    58 : '5GMM cause',
-    37 : 'Back-off timer value',
-    59 : 'Old PDU session ID',
-    80 : 'Request type',
-    22 : 'S-NSSAI',
-    25 : 'DNN'
-    }
+    0x12: 'PDU session ID',
+    0x24: 'Additional information',
+    0x58: '5GMM cause',
+    0x37: 'Back-off timer value',
+    0x59: 'Old PDU session ID',
+    0x80: 'Request type',
+    0x22: 'S-NSSAI',
+    0x25: 'DNN',
+    0xF0: 'Release Assistance INdication',
+    0xA0: 'MA PDU session information'
+}
 
 
 class _PayContOpt(Envelope):
@@ -4031,54 +4034,74 @@ class _PayContOpt(Envelope):
         Uint8('Type', dic=_PayContOptType_dict),
         Uint8('Len'),
         Alt('Val', GEN={
-            0x12 : PDUSessID(),
-            0x24 : Buf('AdditionalInfo', rep=REPR_HEX),
-            0x58 : FGMMCause(),
-            0x37 : GPRSTimer3('BackOffTimer'),
-            0x59 : PDUSessID('OldPDUSessID'),
-            0x80 : Uint8('RequestType', dic=_RequestType_dict),
-            0x22 : SNSSAI(),
-            0x25 : DNN(),
-            0xF0 : Uint8('ReleaseAssistInd', dic=RelAssist_DDXDict),
-            0xA0 : Uint8('MAPDUSessInfo', dic=MAPDUSessInfo_dict)
-            },
+            0x12: PDUSessID(),
+            0x24: Buf('AdditionalInfo', rep=REPR_HEX, bl=128), # bl arbitrary
+            0x58: FGMMCause(),
+            0x37: GPRSTimer3('BackOffTimer'),
+            0x59: PDUSessID('OldPDUSessID'),
+            0x80: Uint8('RequestType', dic=_RequestType_dict),
+            0x22: SNSSAI(),
+            0x25: DNN(),
+            0xF0: Uint8('ReleaseAssistInd', dic=RelAssist_DDXDict),
+            0xA0: Uint8('MAPDUSessInfo', dic=MAPDUSessInfo_dict)
+        },
             DEFAULT=Buf('Val'),
             sel=lambda self: self.get_env()[0].get_val()
             )
-        )
-    
+    )
+
     def __init__(self, *args, **kwargs):
         Envelope.__init__(self, *args, **kwargs)
         self[1].set_valauto(lambda: self[2].get_len())
-        self[2].set_blauto(lambda: self[1].get_val()<<3)
+        self[2].set_blauto(lambda: self[1].get_val() << 3)
 
 
 class _PayContEntry(Envelope):
     _GEN = (
         Uint16('Len'),
         Uint('OptNum', bl=4),
-        Uint('Type', bl=4, dic=PayloadContainerType_dict),
-        Sequence('Opts', GEN=_PayContOpt('Opt')),
-        Buf('Cont', val=b'', rep=REPR_HEX)
-        )
-    
+        Uint('PayloadContainerType', bl=4, dic=PayloadContainerType_dict),
+        Sequence('PayContOpts', GEN=_PayContOpt('Opt')),
+        Buf('PayloadContainer', val=b'', rep=REPR_HEX)
+    )
+
     def __init__(self, *args, **kwargs):
         Envelope.__init__(self, *args, **kwargs)
-        self[0].set_valauto(lambda: 1 + self[3].get_len() + self[4].get_len())
+        self[0].set_valauto(lambda: 3 + self[3].get_len() + self[4].get_len())
         self[1].set_valauto(lambda: self[3].get_num())
         self[3].set_numauto(lambda: self[1].get_val())
-        self[4].set_blauto(lambda: (self[0].get_val()-1-self[3].get_len())<<3)
+        self[4].set_blauto(lambda: (self[0].get_val() - 1 - self[3].get_len()) << 3)
 
 
 class PayloadContainerMult(Envelope):
     _GEN = (
         Uint8('Num'),
         Sequence('Entries', GEN=_PayContEntry('Entry'))
-        )
-    
+    )
+
     def __init__(self, *args, **kwargs):
         Envelope.__init__(self, *args, **kwargs)
         self[0].set_valauto(lambda: self[1].get_num())
         self[1].set_numauto(lambda: self[0].get_val())
 
 
+
+class PayloadContainerGroup(Envelope):
+    _GEN = (
+        Uint('PayloadContainerType',bl=4, dic=PayloadContainerType_dict),
+        Uint16('Len'),
+        Alt("PayloadContainer", GEN={
+            FGSMMContType.SMS: CP_MSG("CP_MSG"),
+            FGSMMContType.SOR: SORTransContainer("SORTransContainer"),
+            FGSMMContType.UEPRMUP: UPUTransContainer(),
+            FGSMMContType.CIOTUD: CIoTSmallDataContainer("CIoTSmallDataContainer"),
+            FGSMMContType.MULT: PayloadContainerMult()
+        },
+            sel=lambda self: self.get_env()['PayloadContainerType'].get_val()
+        )
+    )
+
+    def __init__(self, *args, **kwargs):
+        Envelope.__init__(self, *args, **kwargs)
+        self[1].set_valauto(lambda: self[2].get_len())
+        self[2].set_blauto(lambda: self[1].get_val()*8)

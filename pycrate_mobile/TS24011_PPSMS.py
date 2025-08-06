@@ -62,6 +62,7 @@ __all__ = [
 from pycrate_core.utils import *
 from pycrate_core.elt   import *
 from pycrate_core.base  import *
+from pycrate_mobile.TS23040_SMS import SMS_DATA_MT_COMBINED
 
 from .TS24007     import *
 from .TS24008_IE  import BufBCD, _BCDType_dict, _NumPlan_dict
@@ -78,126 +79,6 @@ class SMS_RP(Layer3):
     """parent class for all SMS RP messages
     """
     pass
-
-
-#------------------------------------------------------------------------------#
-# CP‑messages
-# TS 24.011, section 8.1
-#------------------------------------------------------------------------------#
-
-_SMSPP_CP_dict = {
-    1 : 'SMS CP-DATA',
-    4 : 'SMS CP-ACK',
-    16: 'SMS CP-ERROR'
-    }
-
-class CPHeader(Envelope):
-    _GEN = (
-        TIPD(val={'ProtDisc': 9}),
-        Uint8('Type', val=1, dic=_SMSPP_CP_dict),
-        )
-
-
-#------------------------------------------------------------------------------#
-# CP‑Cause element
-# TS 24.011, 8.1.4.2
-#------------------------------------------------------------------------------#
-
-_CPCause_dict = {
-    17 : 'Network failure',
-    22 : 'Congestion',
-    81 : 'Invalid Transaction Identifier value',
-    95 : 'Semantically incorrect message',
-    96 : 'Invalid mandatory information',
-    97 : 'Message type non existent or not implemented',
-    98 : 'Message not compatible with the short message protocol state',
-    99 : 'Information element non existent or not implemented',
-    111: 'Protocol error, unspecified',
-    }
-
-class CPCause(Uint8):
-    _dic = _CPCause_dict
-
-
-#------------------------------------------------------------------------------#
-# CP‑DATA
-# TS 24.011, section 7.2.1
-#------------------------------------------------------------------------------#
-
-class CP_DATA(SMS_CP):
-    _GEN = (
-        CPHeader(val={'Type':1}),
-        Type4LV('CPUserData', val={'V':b''})
-        )
-    
-    def _from_char(self, char):
-        Layer3._from_char(self, char)
-        L = self['CPUserData'][0].get_val()
-        if L:
-            ccur, clen = char._cur, char._len_bit
-            char._cur -= 8*L
-            char._len_bit = char._cur + 8*L
-            mti = char.to_uint(8) & 0x7
-            try:
-                rp = PPSMSRPTypeClasses[mti]()
-                rp._from_char(char)
-            except:
-                log('%s, _from_char: unable to decode RP message' % self._name)
-            else:
-                if char.len_bit() > 0:
-                    log('%s, _from_char: incorrect decoding of RP message, %s'\
-                        % (self._name, rp._name))
-                else:
-                    self.set_rp(rp)
-            char._cur, char._len_bit = ccur, clen
-    
-    def set_rp(self, rp):
-        cpud = self['CPUserData']
-        # save the V buffer
-        if cpud[1]._name == 'V':
-            cpud._V  = cpud[1]
-        # set the RP message like an IE
-        cpud._IE = rp
-        # replace V with the IE
-        cpud.replace(cpud[1], rp)
-        cpud[0].set_valauto(rp.get_len)
-
-
-#------------------------------------------------------------------------------#
-# CP‑ACK
-# TS 24.011, section 7.2.2
-#------------------------------------------------------------------------------#
-
-class CP_ACK(SMS_CP):
-    _GEN = (
-        CPHeader(val={'Type':4}),
-        )
-
-
-#------------------------------------------------------------------------------#
-# CP‑ERROR
-# TS 24.011, section 7.2.3
-#------------------------------------------------------------------------------#
-
-class CP_ERROR(SMS_CP):
-    _GEN = (
-        CPHeader(val={'Type':16}),
-        Type3V('CPCause', val={'V':b'\x11'}, bl={'V':8}, IE=CPCause())
-        )
-
-
-#------------------------------------------------------------------------------#
-# PP-SMS CP dispatcher
-#------------------------------------------------------------------------------#
-
-PPSMSCPTypeClasses = {
-    1 : CP_DATA,
-    4 : CP_ACK,
-    16: CP_ERROR
-    }
-
-def get_ppsmscp_msg_instances():
-    return {k: PPSMSCPTypeClasses[k]() for k in PPSMSCPTypeClasses}
 
 
 #------------------------------------------------------------------------------#
@@ -343,7 +224,6 @@ class _RP_DATA(SMS_RP):
         rpud.replace(rpud[-1], tpdu)
         rpud['L'].set_valauto(tpdu.get_len)
 
-
 class RP_DATA_MT(_RP_DATA):
     TPDU = {
         0 : SMS_DELIVER,
@@ -354,6 +234,24 @@ class RP_DATA_MT(_RP_DATA):
         Type4LV('RPDestinationAddress', val={'V':b''}),
         Type4LV('RPUserData', val={'V':b''}) # < 234 bytes
         )
+
+class RP_DATA_MT_NO_HEADER(SMS_RP):
+    _GEN = (
+        Uint8('LenRPOrig'),
+        RPOriginatorAddress(),
+        Uint8('LenRPDest'),
+        Buf('spare'),
+        Uint8('LenData'),
+        SMS_DATA_MT_COMBINED('RPUserData') # < 234 bytes
+        )
+    def __init__(self, *args, **kwargs):
+        SMS_RP.__init__(self, *args, **kwargs)
+        self['LenRPOrig'].set_valauto(lambda: self['RPOriginatorAddress'].get_len())
+        self['LenRPDest'].set_valauto(lambda: self['spare'].get_len())
+        self['LenData'].set_valauto(lambda: self['RPUserData'].get_len())
+        self['RPUserData'].set_blauto(lambda: self['LenData'].get_val()*8)
+        self['spare'].set_blauto(lambda: self['LenRPDest'].get_val()*8)
+        self['RPOriginatorAddress'].set_blauto(lambda: self['LenRPOrig'].get_val()*8)
 
 
 #------------------------------------------------------------------------------#
@@ -367,10 +265,12 @@ class RP_DATA_MO(_RP_DATA):
         2 : SMS_COMMAND
         }
     _GEN = tuple(RPHeader(val={'MTI':0})._content) + (
-        Type4LV('RPOriginatorAddress', val={'V':b''}),
+        Type4LV('RPOriginatorAddress', val={'V':b''},IE=Buf('spare')),
         Type4LV('RPDestinationAddress', val={'V':b'\x91'}, IE=RPDestinationAddress()),
         Type4LV('RPUserData', val={'V':b''}) # < 234 bytes
         )
+
+# RP_DATA_MO_NO_HEADER Not done cause not useful for this project
 
 
 #------------------------------------------------------------------------------#
@@ -393,6 +293,15 @@ class RP_ACK_MT(_RP_DATA):
         Type4TLV('RPUserData', val={'T':0x41, 'V':b''}),
         )
 
+        
+class RP_ACK_MT_NO_HEADER(SMS_RP):
+    _GEN = (
+        Uint8('LenData'),
+        SMS_SUBMIT_REPORT_RP_ACK('RPUserData')
+        )
+    def __init__(self, *args, **kwargs):
+        SMS_RP.__init__(self, *args, **kwargs)
+        self['LenData'].set_valauto(lambda: self['RPUserData'].get_len())
 
 class RP_ACK_MO(_RP_DATA):
     TPDU = SMS_DELIVER_REPORT_RP_ACK
@@ -412,6 +321,21 @@ class RP_ERROR_MT(_RP_DATA):
         Type4LV('RPCause', val={'V':b'\0'}, IE=RPCause()),
         Type4TLV('RPUserData', val={'T':0x41, 'V':b''}),
         )
+
+class RP_ERROR_MT_NO_HEADER(SMS_RP):
+    _GEN = (
+        Uint8('LenCause'),
+        RPCause(),
+        Uint8('LenData'),
+        SMS_SUBMIT_REPORT_RP_ERROR('RPUserData')
+        )
+    
+    def __init__(self, *args, **kwargs):
+        SMS_RP.__init__(self, *args, **kwargs)
+        self['LenCause'].set_valauto(lambda: self['RPCause'].get_len())
+        self['LenData'].set_valauto(lambda: self['RPUserData'].get_len())
+        self['RPCause'].set_blauto(lambda: self['LenCause'].get_val()*8)
+        self['RPUserData'].set_blauto(lambda: self['LenData'].get_val()*8)
 
 
 class RP_ERROR_MO(_RP_DATA):
@@ -439,3 +363,163 @@ PPSMSRPTypeClasses = {
 def get_ppsmsrp_msg_instances():
     return {k: PPSMSRPTypeClasses[k]() for k in PPSMSRPTypeClasses}
 
+class RP_MSG(_RP_DATA):
+    _GEN = (
+        RPHeader(),
+        Alt('RP_DATA', GEN={
+            1: RP_DATA_MT_NO_HEADER(),
+            3: RP_ACK_MT_NO_HEADER(),
+            5: RP_ERROR_MT_NO_HEADER(),
+        },
+        sel=lambda self: self.get_env()[0]['MTI'].get_val(),
+        )
+
+    )
+
+
+# ------------------------------------------------------------------------------#
+# CP‑messages
+# TS 24.011, section 8.1
+# ------------------------------------------------------------------------------#
+
+_SMSPP_CP_dict = {
+    1: 'SMS CP-DATA',
+    4: 'SMS CP-ACK',
+    16: 'SMS CP-ERROR'
+}
+
+
+class CPHeader(Envelope):
+    _GEN = (
+        TIPD(val={'ProtDisc': 9}),
+        Uint8('Type', val=1, dic=_SMSPP_CP_dict),
+    )
+
+
+# ------------------------------------------------------------------------------#
+# CP‑Cause element
+# TS 24.011, 8.1.4.2
+# ------------------------------------------------------------------------------#
+
+_CPCause_dict = {
+    17: 'Network failure',
+    22: 'Congestion',
+    81: 'Invalid Transaction Identifier value',
+    95: 'Semantically incorrect message',
+    96: 'Invalid mandatory information',
+    97: 'Message type non existent or not implemented',
+    98: 'Message not compatible with the short message protocol state',
+    99: 'Information element non existent or not implemented',
+    111: 'Protocol error, unspecified',
+}
+
+
+class CPCause(Uint8):
+    _dic = _CPCause_dict
+
+
+# ------------------------------------------------------------------------------#
+# CP‑DATA
+# TS 24.011, section 7.2.1
+# ------------------------------------------------------------------------------#
+
+class CP_DATA(SMS_CP):
+    _GEN = (
+        CPHeader(val={'Type': 1}),
+        Type4LV('CPUserData', val={'V': b''})
+    )
+
+    def _from_char(self, char):
+        Layer3._from_char(self, char)
+        L = self['CPUserData'][0].get_val()
+        if L:
+            ccur, clen = char._cur, char._len_bit
+            char._cur -= 8 * L
+            char._len_bit = char._cur + 8 * L
+            mti = char.to_uint(8) & 0x7
+            try:
+                rp = PPSMSRPTypeClasses[mti]()
+                rp._from_char(char)
+            except:
+                log('%s, _from_char: unable to decode RP message' % self._name)
+            else:
+                if char.len_bit() > 0:
+                    log('%s, _from_char: incorrect decoding of RP message, %s' \
+                        % (self._name, rp._name))
+                else:
+                    self.set_rp(rp)
+            char._cur, char._len_bit = ccur, clen
+
+    def set_rp(self, rp):
+        cpud = self['CPUserData']
+        # save the V buffer
+        if cpud[1]._name == 'V':
+            cpud._V = cpud[1]
+        # set the RP message like an IE
+        cpud._IE = rp
+        # replace V with the IE
+        cpud.replace(cpud[1], rp)
+        cpud[0].set_valauto(rp.get_len)
+
+
+# ------------------------------------------------------------------------------#
+# CP‑ACK
+# TS 24.011, section 7.2.2
+# ------------------------------------------------------------------------------#
+
+class CP_ACK(SMS_CP):
+    _GEN = (
+        CPHeader(val={'Type': 4}),
+    )
+
+
+# ------------------------------------------------------------------------------#
+# CP‑ERROR
+# TS 24.011, section 7.2.3
+# ------------------------------------------------------------------------------#
+
+class CP_ERROR(SMS_CP):
+    _GEN = (
+        CPHeader(val={'Type': 16}),
+        Type3V('CPCause', val={'V': b'\x11'}, bl={'V': 8}, IE=CPCause())
+    )
+
+
+# ------------------------------------------------------------------------------#
+# PP-SMS CP dispatcher
+# ------------------------------------------------------------------------------#
+
+PPSMSCPTypeClasses = {
+    1: CP_DATA,
+    4: CP_ACK,
+    16: CP_ERROR
+}
+
+
+def get_ppsmscp_msg_instances():
+    return {k: PPSMSCPTypeClasses[k]() for k in PPSMSCPTypeClasses}
+
+class CPUserData2(SMS_CP):
+    _GEN= (
+        Uint8('Len'),
+        RP_MSG()
+    )
+    def __init__(self, *args, **kwargs):
+        SMS_CP.__init__(self, *args, **kwargs)
+        self[0].set_valauto(lambda: self[1].get_len())
+        self[1].set_blauto(lambda: self[0].get_val()*8)
+
+
+class CP_MSG(SMS_CP):
+    _GEN = (
+        CPHeader('CPHeader'),
+        Alt('SMS', GEN={
+            1: CPUserData2('CPUserData'),
+            4: Buf('spare'),
+            16: Uint8('CPCause', dic=_CPCause_dict)
+
+        },
+            sel=lambda self: self.get_env()[0]['Type'].get_val(),
+            DEFAULT=CP_DATA('CP_DATA')[1:]
+            )
+    )

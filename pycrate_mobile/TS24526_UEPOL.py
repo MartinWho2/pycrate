@@ -40,6 +40,7 @@ __all__ = [
 # 3GPP TS 24.526: User Equipment (UE) policies for 5G System (5GS)
 # release 16 (g10)
 #------------------------------------------------------------------------------#
+from enum       import IntEnum
 
 from pycrate_core.utils import *
 from pycrate_core.elt   import *
@@ -49,11 +50,247 @@ from pycrate_ether.IP       import IPProt_dict
 from pycrate_ether.Ethernet import EtherType_dict
 
 from .TS24008_IE import (
-    PLMN, 
+    PLMN, APN
     )
-from .TS24501_IE import (
-    DNN, _SSCMode_dict, SNSSAI, PDUSessType, FGSTAIList, 
+#from .TS24501_IE import (
+#    DNN, _SSCMode_dict, SNSSAI, PDUSessType, FGSTAIList,
+#    )
+_str_reserved = 'reserved'
+
+
+class FGSTAI(Envelope):
+    _name = '5GSTAI'
+    _GEN = (
+        PLMN(),
+        Uint24('TAC', rep=REPR_HEX)
     )
+
+    encode = Envelope.set_val
+
+    def decode(self):
+        return (self[0].decode(), self[1].get_val())
+
+class DNN(Envelope):
+    _GEN = (
+        Uint8('Len'),
+        APN()
+    )
+
+    def __init__(self, *args, **kwargs):
+        Envelope.__init__(self, *args, **kwargs)
+        self[0].set_valauto(lambda: self[1].get_len())
+        self[1].set_blauto(lambda: self[0].get_val() << 3)
+
+    def set_val(self, val):
+        if isinstance(val, str_types):
+            self.encode(val)
+        else:
+            Envelope.set_val(self, val)
+
+    def encode(self, val):
+        self[1].encode(val)
+
+    def decode(self, val):
+        return self[1].decode()
+
+_SSCMode_dict = {
+    1 : 'mode 1',
+    2 : 'mode 2',
+    3 : 'mode 3',
+    4 : 'unused - mode 1',
+    5 : 'unused - mode 2',
+    6 : 'unused - mode 3'
+    }
+
+_SST_dict = {
+    1: 'eMBB',
+    2: 'URLLC',
+    3: 'MIoT',
+    4: 'V2X',
+    }
+class SNSSAI(Envelope):
+    ENV_SEL_TRANS = False
+
+    _GEN = (
+        Uint8('SST', dic=_SST_dict),
+        Uint24('SD', rep=REPR_HEX, trans=True),
+        Uint8('MappedHPLMNSST', trans=True),
+        Uint24('MappedHPLMNSD', rep=REPR_HEX, trans=True)
+    )
+
+    def set_val(self, val):
+        if isinstance(val, (tuple, list)):
+            if len(val) == 1:
+                self[1].set_trans(True)
+                self[2].set_trans(True)
+                self[3].set_trans(True)
+            elif len(val) == 2:
+                self[1].set_trans(False)
+                self[2].set_trans(True)
+                self[3].set_trans(True)
+            elif len(val) == 3:
+                self[1].set_trans(False)
+                self[2].set_trans(False)
+                self[3].set_trans(True)
+            elif len(val) > 3:
+                self[1].set_trans(False)
+                self[2].set_trans(False)
+                self[3].set_trans(False)
+        elif isinstance(val, dict):
+            if 'SD' in val:
+                self[1].set_trans(False)
+            if 'MappedHPLMNSST' in val:
+                self[2].set_trans(False)
+            if 'MappedHPLMNSD' in val:
+                self[1].set_trans(False)
+                self[3].set_trans(False)
+        Envelope.set_val(self, val)
+
+    def _from_char(self, char):
+        if self.get_trans():
+            return
+        if self._blauto is not None:
+            # this is required when this struct is wrapped as L_SNSSAI
+            bl = self._blauto()
+        else:
+            bl = char.len_bit()
+        if bl == 8:
+            self[1].set_trans(True)
+            self[2].set_trans(True)
+            self[3].set_trans(True)
+        elif bl == 16:
+            self[1].set_trans(True)
+            self[2].set_trans(False)
+            self[3].set_trans(True)
+        elif bl == 32:
+            self[1].set_trans(False)
+            self[2].set_trans(True)
+            self[3].set_trans(True)
+        elif bl == 40:
+            self[1].set_trans(False)
+            self[2].set_trans(False)
+            self[3].set_trans(True)
+        elif bl >= 64:
+            self[1].set_trans(False)
+            self[2].set_trans(False)
+            self[3].set_trans(False)
+        Envelope._from_char(self, char)
+
+class PDUSESSTYPE(IntEnum):
+    IPV4            = 1
+    IPV6            = 2
+    IPV4V6          = 3
+    UNSTRUCTURED    = 4
+    ETHERNET        = 5
+
+_PDUSessType_dict = {
+    1 : 'IPv4',
+    2 : 'IPv6',
+    3 : 'IPv4v6',
+    4 : 'Unstructured',
+    5 : 'Ethernet',
+    7 : _str_reserved
+    }
+
+
+class PDUSessType(Envelope):
+    _GEN = (
+        Uint('spare', bl=1),
+        Uint('Value', val=PDUSESSTYPE.IPV4, bl=3, dic=_PDUSessType_dict)
+        )
+
+
+_PTAIListType_dict = {
+    0: 'list of TACs belonging to one PLMN, with non-consecutive TAC values',
+    1: 'list of TACs belonging to one PLMN, with consecutive TAC values',
+    2: 'list of TAIs belonging to different PLMNs'
+}
+
+
+class _PTAIList0(Envelope):
+    """List of non-consecutive TACs belonging to one PLMN
+    """
+
+    _GEN = (
+        Uint('Num', bl=5),
+        PLMN(),
+        Array('TACs', GEN=Uint24('TAC'))
+    )
+
+    def __init__(self, *args, **kwargs):
+        Envelope.__init__(self, *args, **kwargs)
+        self[0].set_valauto(lambda: max(0, self[2].get_num() - 1))
+        self[2].set_numauto(lambda: self[0].get_val() + 1)
+
+    def get_tai(self):
+        plmn = self['PLMN'].decode()
+        return set([(plmn, tac) for tac in self['TACs'].get_val()])
+
+
+class _PTAIList1(Envelope):
+    """List of consecutive TACs belonging to one PLMN
+    """
+
+    _GEN = (
+        Uint('Num', bl=5),
+        PLMN(),
+        Uint24('TAC1'),
+    )
+
+    def get_tai(self):
+        plmn, tac1 = self['PLMN'].decode(), self['TAC1'].get_val()
+        return set([(plmn, tac1 + i) for i in range(self['Num'].get_val() + 1)])
+
+
+class _PTAIList2(Envelope):
+    """List of TAI belonging to different PLMNs
+    """
+
+    _GEN = (
+        Uint('Num', bl=5),
+        Sequence('TAIs', GEN=FGSTAI())
+    )
+
+    def __init__(self, *args, **kwargs):
+        Envelope.__init__(self, *args, **kwargs)
+        self[0].set_valauto(lambda: max(0, self[1].get_num() - 1))
+        self[1].set_numauto(lambda: self[0].get_val() + 1)
+
+    def get_tai(self):
+        return set([tai.decode() for tai in self['TAIs']])
+
+
+class FGSPTAIList(Envelope):
+    _name = '5GSPTAIList'
+    _GEN = (
+        Uint('spare', bl=1),
+        Uint('Type', bl=2, dic=_PTAIListType_dict),
+        Alt('PTAI', GEN={
+            0: _PTAIList0('PTAIList0'),
+            1: _PTAIList1('PTAIList1'),
+            2: _PTAIList2('PTAIList2')
+        },
+            DEFAULT=_PTAIList1('PTAIList1'),
+            sel=lambda self: self.get_env()['Type'].get_val())
+    )
+
+    def get_tai(self):
+        return self['PTAI'].get_alt().get_tai()
+
+    # TODO: implement a best-effort algo to set TAIs in the minimum size
+    # def set_tai(self, set_of_tais):
+    #    pass
+
+
+class FGSTAIList(Sequence):
+    _name = '5GSTAIList'
+    _GEN = FGSPTAIList()
+
+    def get_tai(self):
+        tai = set()
+        for tl in self:
+            tai.update(tl.get_tai())
+        return tai
 
 
 #------------------------------------------------------------------------------#

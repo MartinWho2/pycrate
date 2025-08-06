@@ -167,7 +167,10 @@ _TP_MTI_MT_dict = {
     2 : 'SMS-STATUS-REPORT',
     3 : 'Reserved',
     }
-
+_TP_MTI_MT_dict_refined = {
+    0 : 'SMS-DELIVER',
+    2 : 'SMS-STATUS-REPORT',
+    }
 _TP_MTI_MO_dict = {
     0 : 'SMS-DELIVER-REPORT',
     1 : 'SMS-SUBMIT',
@@ -1084,9 +1087,9 @@ class TP_PI(Envelope):
     _GEN = (
         Uint('Ext', bl=1),
         Uint('reserved', bl=4),
-        Uint('TP_UDL', bl=1),
-        Uint('TP_DCS', bl=1),
-        Uint('TP_PID', bl=1)
+        Uint('TP_UDL_Pres', bl=1),
+        Uint('TP_DCS_Pres', bl=1),
+        Uint('TP_PID_Pres', bl=1)
         )
 
 
@@ -1104,7 +1107,7 @@ class SMS_DELIVER(SMS_TP):
         Uint('spare', bl=1),
         Uint('TP_LP', desc='Loop Prevention', bl=1),
         Uint('TP_MMS', bl=1, dic=_TP_MMS_dict),
-        Uint('TP_MTI', val=0, bl=2, dic=_TP_MTI_MT_dict),
+        Uint('TP_MTI', val=0, bl=2),
         TP_OA(desc='Originating Address'),
         TP_PID(),
         TP_DCS(),
@@ -1125,7 +1128,7 @@ class SMS_DELIVER_REPORT_RP_ERROR(SMS_TP):
         Uint('spare', bl=1),
         Uint('TP_UDHI', desc='UDH Indicator', bl=1),
         Uint('spare', bl=4),
-        Uint('TP_MTI', val=0, bl=2, dic=_TP_MTI_MO_dict),
+        Uint('TP_MTI', val=0, bl=2),
         Uint8('TP_FCS', dic=_TP_FCS_dict),
         TP_PI(),
         TP_PID(),
@@ -1134,9 +1137,9 @@ class SMS_DELIVER_REPORT_RP_ERROR(SMS_TP):
         )
     def __init__(self, *args, **kwargs):
         Envelope.__init__(self, *args, **kwargs)
-        self['TP_PID'].set_transauto(lambda: False if self['TP_PI']['TP_PID']() else True)
-        self['TP_DCS'].set_transauto(lambda: False if self['TP_PI']['TP_DCS']() else True)
-        self['TP_UD'].set_transauto(lambda: False if self['TP_PI']['TP_UDL']() else True)
+        self['TP_PID'].set_transauto(lambda: False if self['TP_PI']['TP_PID_Pres']() else True)
+        self['TP_DCS'].set_transauto(lambda: False if self['TP_PI']['TP_DCS_Pres']() else True)
+        self['TP_UD'].set_transauto(lambda: False if self['TP_PI']['TP_UDL_Pres']() else True)
 
 
 #------------------------------------------------------------------------------#
@@ -1151,7 +1154,7 @@ class SMS_DELIVER_REPORT_RP_ACK(SMS_TP):
         Uint('spare', bl=1),
         Uint('TP_UDHI', desc='UDH Indicator', bl=1),
         Uint('spare', bl=4),
-        Uint('TP_MTI', val=0, bl=2, dic=_TP_MTI_MO_dict),
+        Uint('TP_MTI', val=0, bl=2),
         TP_PI(),
         TP_PID(),
         TP_DCS(),
@@ -1159,9 +1162,9 @@ class SMS_DELIVER_REPORT_RP_ACK(SMS_TP):
         )
     def __init__(self, *args, **kwargs):
         Envelope.__init__(self, *args, **kwargs)
-        self['TP_PID'].set_transauto(lambda: False if self['TP_PI']['TP_PID']() else True)
-        self['TP_DCS'].set_transauto(lambda: False if self['TP_PI']['TP_DCS']() else True)
-        self['TP_UD'].set_transauto(lambda: False if self['TP_PI']['TP_UDL']() else True)
+        self['TP_PID'].set_transauto(lambda: False if self['TP_PI']['TP_PID_Pres']() else True)
+        self['TP_DCS'].set_transauto(lambda: False if self['TP_PI']['TP_DCS_Pres']() else True)
+        self['TP_UD'].set_transauto(lambda: False if self['TP_PI']['TP_UDL_Pres']() else True)
 
 
 #------------------------------------------------------------------------------#
@@ -1178,7 +1181,7 @@ class SMS_SUBMIT(SMS_TP):
         Uint('TP_SRR', bl=1, dic=_TP_SRR_dict),
         Uint('TP_VPF', bl=2, dic=_TP_VPF_dict),
         Uint('TP_RD', desc='Reject Duplicates', bl=1),
-        Uint('TP_MTI', val=1, bl=2, dic=_TP_MTI_MO_dict),
+        Uint('TP_MTI', val=1, bl=2),
         Uint8('TP_MR', desc='Message Reference'),
         TP_DA(desc='Destination Address'),
         TP_PID(),
@@ -1208,7 +1211,7 @@ class SMS_SUBMIT_REPORT_RP_ERROR(SMS_TP):
         Uint('spare', bl=1),
         Uint('TP_UDHI', desc='UDH Indicator', bl=1),
         Uint('spare', bl=4),
-        Uint('TP_MTI', val=1, bl=2, dic=_TP_MTI_MT_dict),
+        Uint('TP_MTI', val=1, bl=2),
         Uint8('TP_FCS', dic=_TP_FCS_dict),
         TP_PI(),
         TP_SCTS(),
@@ -1218,9 +1221,9 @@ class SMS_SUBMIT_REPORT_RP_ERROR(SMS_TP):
         )
     def __init__(self, *args, **kwargs):
         Envelope.__init__(self, *args, **kwargs)
-        self['TP_PID'].set_transauto(lambda: False if self['TP_PI']['TP_PID']() else True)
-        self['TP_DCS'].set_transauto(lambda: False if self['TP_PI']['TP_DCS']() else True)
-        self['TP_UD'].set_transauto(lambda: False if self['TP_PI']['TP_UDL']() else True)
+        self['TP_PID'].set_transauto(lambda: False if self['TP_PI']['TP_PID_Pres']() else True)
+        self['TP_DCS'].set_transauto(lambda: False if self['TP_PI']['TP_DCS_Pres']() else True)
+        self['TP_UD'].set_transauto(lambda: False if self['TP_PI']['TP_UDL_Pres']() else True)
 
 
 #------------------------------------------------------------------------------#
@@ -1235,7 +1238,7 @@ class SMS_SUBMIT_REPORT_RP_ACK(SMS_TP):
         Uint('spare', bl=1),
         Uint('TP_UDHI', desc='UDH Indicator', bl=1),
         Uint('spare', bl=4),
-        Uint('TP_MTI', val=1, bl=2, dic=_TP_MTI_MT_dict),
+        Uint('TP_MTI', val=1, bl=2),
         TP_PI(),
         TP_SCTS(),
         TP_PID(),
@@ -1244,9 +1247,9 @@ class SMS_SUBMIT_REPORT_RP_ACK(SMS_TP):
         )
     def __init__(self, *args, **kwargs):
         Envelope.__init__(self, *args, **kwargs)
-        self['TP_PID'].set_transauto(lambda: False if self['TP_PI']['TP_PID']() else True)
-        self['TP_DCS'].set_transauto(lambda: False if self['TP_PI']['TP_DCS']() else True)
-        self['TP_UD'].set_transauto(lambda: False if self['TP_PI']['TP_UDL']() else True)
+        self['TP_PID'].set_transauto(lambda: False if self['TP_PI']['TP_PID_Pres']() else True)
+        self['TP_DCS'].set_transauto(lambda: False if self['TP_PI']['TP_DCS_Pres']() else True)
+        self['TP_UD'].set_transauto(lambda: False if self['TP_PI']['TP_UDL_Pres']() else True)
 
 
 #------------------------------------------------------------------------------#
@@ -1278,9 +1281,9 @@ class SMS_STATUS_REPORT(SMS_TP):
     def __init__(self, *args, **kwargs):
         Envelope.__init__(self, *args, **kwargs)
         # warning: TP-PI may be transparent
-        self['TP_PID'].set_transauto(lambda: False if not self['TP_PI'].get_trans() and self['TP_PI']['TP_PID']() else True)
-        self['TP_DCS'].set_transauto(lambda: False if not self['TP_PI'].get_trans() and self['TP_PI']['TP_DCS']() else True)
-        self['TP_UD'].set_transauto(lambda: False if not self['TP_PI'].get_trans() and self['TP_PI']['TP_UDL']() else True)
+        self['TP_PID'].set_transauto(lambda: False if not self['TP_PI'].get_trans() and self['TP_PI']['TP_PID_Pres']() else True)
+        self['TP_DCS'].set_transauto(lambda: False if not self['TP_PI'].get_trans() and self['TP_PI']['TP_DCS_Pres']() else True)
+        self['TP_UD'].set_transauto(lambda: False if not self['TP_PI'].get_trans() and self['TP_PI']['TP_UDL_Pres']() else True)
     
     def _from_char(self, char):
         if not self.get_trans():
@@ -1294,7 +1297,61 @@ class SMS_STATUS_REPORT(SMS_TP):
                 self[-2]._from_char(char)
                 self[-1]._from_char(char)
 
+class SMS_DATA_MT_COMBINED(SMS_TP):
+    _GEN = (
+        Uint('TP_RP', bl=1, dic=_TP_RP_dict),
+        Uint('TP_UDHI', desc='UDH Indicator', bl=1),
+        Uint('TP_SRI', bl=1, dic=_TP_SRI_dict), # or SRQ but who cares
+        Uint('spare', bl=1),
+        Uint('TP_LP', desc='Loop Prevention', bl=1),
+        Uint('TP_MMS', bl=1, dic=_TP_MMS_dict),
+        Uint('TP_MTI', val=0, bl=2, dic=_TP_MTI_MT_dict_refined),
+        Uint8('TP_MR', desc='Message Reference'),
+        _TPAddress(desc='Destination/Originating Address'),
+        Alt('MessageEnding',
+            GEN={
+                0 : Envelope(GEN=(
+                    TP_PID(),
+                    TP_DCS(),
+                    TP_SCTS(),
+                    TP_UD()
+                )),
+                2: Envelope(GEN=(
+                    TP_SCTS(),
+                    TP_DT(),
+                    Uint8('TP_ST', dic=_TP_ST_dict),
+                    TP_PI(),  # may be set to transparent in case none of the following fields are present
+                    TP_PID(),
+                    TP_DCS(),
+                    TP_UD()
+                ))
+            },
+            sel=lambda self: self.get_env()['TP_MTI'].get_val()
+        )
+    )
 
+    def __init__(self, *args, **kwargs):
+        Envelope.__init__(self, *args, **kwargs)
+        saved = self['TP_MTI']()
+        self['TP_MTI'].set_val(2)
+        alt2 = self[-1].get_alt()
+        self['TP_MTI'].set_val(saved)
+        self['TP_MR'].set_transauto(lambda: False if self['TP_MTI']() == 2 else True)
+        alt2['TP_PID'].set_transauto(lambda: False if not alt2['TP_PI'].get_trans() and alt2['TP_PI']['TP_PID_Pres']() else True)
+        alt2['TP_DCS'].set_transauto(lambda: False if not alt2['TP_PI'].get_trans() and alt2['TP_PI']['TP_DCS_Pres']() else True)
+        alt2['TP_UD'].set_transauto(lambda: False if not alt2['TP_PI'].get_trans() and alt2['TP_PI']['TP_UDL_Pres']() else True)
+    def _from_char(self, char):
+        if not self.get_trans():
+            # warning: TP_PI may be transparent
+            alt2 = self[-1]._content[2]
+            alt2[-4].set_trans(True)
+            SMS_TP._from_char(self, char)
+            if char.len_bit() >= 8:
+                alt2[-4].set_trans(False)
+                alt2[-4]._from_char(char)
+                alt2[-3]._from_char(char)
+                alt2[-2]._from_char(char)
+                alt2[-1]._from_char(char)
 #------------------------------------------------------------------------------#
 # SMS‑COMMAND type
 # TS 23.040, section 9.2.2.4

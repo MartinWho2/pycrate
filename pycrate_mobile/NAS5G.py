@@ -30,7 +30,7 @@
 from pycrate_core.utils import *
 
 from .TS24501_FGMM  import FGMMTypeClasses, FGMMSecProtNASMessage
-from .TS24501_IE    import FGSMMContType,PayloadContainerMult
+from .TS24501_IE    import FGSMMContType,PayloadContainerMult,CIoTSmallDataContainer,UPUTransContainer
 from .TS24501_FGSM  import FGSMTypeClasses
 from .TS24501_UEPOL import FGUEPOLTypeClasses
 from .TS24519_TSNAF import FGTSNAFEthPortTypeClasses, FGTSNAFBridgeTypeClasses
@@ -115,7 +115,7 @@ def parse_NAS5G(buf, inner=True, sec_hdr=True, null_cipher=False):
         # error 96, invalid mandatory info
         return None, 96
     #
-    if inner:
+    if inner and False:
         if pd == 126:
             if typ in (65, 76, 79, 94):
                 nasc = Msg['NASContainer']

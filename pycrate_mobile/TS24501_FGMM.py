@@ -461,8 +461,7 @@ class FGMMDLNASTransport(Layer3E):
     _GEN  = (
         FGMMHeader(val={'Type':104}),
         Uint('spare', bl=4, rep=REPR_HEX),
-        Type1V('PayloadContainerType', val={'V':1}, dic=PayloadContainerType_dict),
-        Type6LVE('PayloadContainer', val={'V':b'\0'}),
+        PayloadContainerGroup('PayloadContainerGroup'),
         Type3TV('PDUSessID', val={'T':0x12, 'V':b'\0'}, bl={'V':8}, IE=PDUSessID()),
         Type4TLV('AddInfo', val={'T':0x24, 'V':b'\0'}),
         Type3TV('5GMMCause', val={'T':0x58, 'V':b'\x16'}, bl={'V':8}, IE=FGMMCause()),
